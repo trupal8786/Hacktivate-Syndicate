@@ -1,0 +1,324 @@
+import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Toaster, toast } from 'sonner';
+import { 
+  GraduationCap, 
+  LayoutDashboard, 
+  Users, 
+  Bell, 
+  Settings, 
+  LogOut,
+  ChevronRight,
+  BrainCircuit,
+  PieChart,
+  Loader2
+} from 'lucide-react';
+import { projectId, publicAnonKey } from '/utils/supabase/info';
+
+import { LandingPage } from './components/LandingPage';
+import { DNAForm } from './components/DNAForm';
+import { UniversityCard, University } from './components/UniversityCard';
+import { ROICalculator } from './components/ROICalculator';
+import { CounselorDashboard } from './components/CounselorDashboard';
+import { ImageWithFallback } from './components/figma/ImageWithFallback';
+
+type ViewState = 'landing' | 'dna-form' | 'dashboard' | 'counselor';
+
+const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-6c08a8ed`;
+
+export default function App() {
+  const [view, setView] = useState<ViewState>('landing');
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [selectedUni, setSelectedUni] = useState<University | null>(null);
+  const [universities, setUniversities] = useState<University[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Load universities from server
+  React.useEffect(() => {
+    const fetchUnis = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/universities`, {
+          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        });
+        const data = await res.json();
+        setUniversities(data);
+      } catch (err) {
+        console.error('Failed to fetch universities', err);
+      }
+    };
+    fetchUnis();
+  }, []);
+
+  const filteredUniversities = useMemo(() => {
+    if (!userProfile || universities.length === 0) return [];
+    
+    return universities.filter(uni => {
+      if (userProfile.backlogs > 2 && uni.category === 'Dream') return false;
+      if (userProfile.cgpa < 8.5 && uni.category === 'Dream') return false;
+      if (userProfile.greScore < 310 && uni.category === 'Moderate') return false;
+      return true;
+    });
+  }, [userProfile, universities]);
+
+  const handleStartAnalysis = () => setView('dna-form');
+
+  const handleProfileAnalysis = async (data: any) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/profiles`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}` 
+        },
+        body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      
+      setUserProfile(result.profile);
+      toast.success('AI Analysis Complete!', {
+        description: 'Your Engineering DNA has been saved and analyzed.',
+      });
+      setView('dashboard');
+      
+      const filtered = universities.filter(uni => {
+        if (data.backlogs > 2 && uni.category === 'Dream') return false;
+        if (data.cgpa < 8.5 && uni.category === 'Dream') return false;
+        if (data.greScore < 310 && uni.category === 'Moderate') return false;
+        return true;
+      });
+      setSelectedUni(filtered[0] || universities[0]);
+    } catch (err) {
+      toast.error('Failed to save profile');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
+      <Toaster position="top-right" />
+      
+      {/* Navigation */}
+      {view !== 'landing' && (
+        <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+          <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('landing')}>
+              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
+                <GraduationCap className="w-6 h-6 text-white" />
+              </div>
+              <span className="text-xl font-black tracking-tight">EduVoyage <span className="text-blue-600">AI</span></span>
+            </div>
+            
+            <div className="hidden md:flex items-center gap-8">
+              <button 
+                onClick={() => setView('dashboard')}
+                className={`flex items-center gap-2 text-sm font-bold transition-colors ${view === 'dashboard' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
+              >
+                <LayoutDashboard className="w-4 h-4" /> Student Portal
+              </button>
+              <button 
+                onClick={() => setView('counselor')}
+                className={`flex items-center gap-2 text-sm font-bold transition-colors ${view === 'counselor' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
+              >
+                <Users className="w-4 h-4" /> Counselor Dashboard
+              </button>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <button className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition-colors relative">
+                <Bell className="w-5 h-5" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+              </button>
+              <div className="w-10 h-10 rounded-full bg-gray-100 border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-colors">
+                <ImageWithFallback src="https://i.pravatar.cc/100?u=current" alt="User" />
+              </div>
+            </div>
+          </div>
+        </nav>
+      )}
+
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        <AnimatePresence mode="wait">
+          {view === 'landing' && (
+            <LandingPage key="landing" onStart={handleStartAnalysis} />
+          )}
+
+          {view === 'dna-form' && (
+            <motion.div
+              key="dna"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="py-12 relative"
+            >
+              {loading && (
+                <div className="absolute inset-0 z-50 bg-white/50 backdrop-blur-sm flex items-center justify-center rounded-2xl">
+                  <div className="bg-white p-8 rounded-2xl shadow-xl flex flex-col items-center gap-4">
+                    <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+                    <p className="font-bold text-gray-900">Normalizing Engineering DNA...</p>
+                  </div>
+                </div>
+              )}
+              <DNAForm onAnalyze={handleProfileAnalysis} />
+            </motion.div>
+          )}
+
+          {view === 'dashboard' && (
+            <motion.div
+              key="dashboard"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-8"
+            >
+              <div className="flex flex-col md:flex-row gap-8">
+                {/* Sidebar University List */}
+                <div className="md:w-1/3 space-y-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">AI Shortlist</h2>
+                    <p className="text-sm text-gray-500">Based on your Engineering DNA</p>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {filteredUniversities.map((uni) => (
+                      <UniversityCard 
+                        key={uni.id} 
+                        university={uni} 
+                        isSelected={selectedUni?.id === uni.id}
+                        onSelect={setSelectedUni}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="p-4 bg-purple-50 rounded-2xl border border-purple-100 space-y-3">
+                    <div className="flex items-center gap-2 text-purple-700 font-bold text-sm">
+                      <BrainCircuit className="w-4 h-4" />
+                      AI Insight
+                    </div>
+                    <p className="text-xs text-purple-600 leading-relaxed">
+                      Your CGPA of {userProfile?.cgpa} is highly competitive for {userProfile?.country} schools. Consider taking a GRE re-test to unlock 'Dream' tier universities.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Main Content Area */}
+                <div className="md:w-2/3 space-y-8">
+                  {selectedUni && (
+                    <>
+                      <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row gap-6">
+                        <div className="md:w-1/3">
+                          <ImageWithFallback 
+                            src={selectedUni.image} 
+                            alt={selectedUni.name} 
+                            className="w-full h-48 rounded-2xl object-cover"
+                          />
+                        </div>
+                        <div className="md:w-2/3 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-2xl font-black text-gray-900">{selectedUni.name}</h3>
+                            <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold uppercase">
+                              #{selectedUni.ranking} Global
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="flex items-center gap-3 text-sm text-gray-600">
+                              <PieChart className="w-4 h-4 text-gray-400" />
+                              <span>{selectedUni.acceptanceRate} Acceptance</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-sm text-gray-600">
+                              <Settings className="w-4 h-4 text-gray-400" />
+                              <span>STEM-OPT Eligible</span>
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-500 italic">
+                            "CMU is the world leader in computer science research with average graduates seeing a 40% salary hike within 2 years."
+                          </p>
+                          <div className="flex gap-3">
+                            <button className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors">
+                              Book Counselor Review
+                            </button>
+                            <button className="px-4 py-3 bg-gray-50 text-gray-700 font-bold rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+                              Alumni Network
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <ROICalculator 
+                        tuitionCost={selectedUni.tuitionFee}
+                        startingSalary={selectedUni.avgSalary}
+                        livingCost={20000}
+                      />
+
+                      <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                        <h4 className="font-bold text-gray-900 mb-6 flex items-center gap-2">
+                          <ChevronRight className="w-5 h-5 text-blue-600" />
+                          Application Checklist
+                        </h4>
+                        <div className="space-y-4">
+                          {[
+                            { task: 'Normalize CGPA for US GPA (Done)', status: 'complete' },
+                            { task: 'Prepare SOP (Draft 1 Review Pending)', status: 'pending' },
+                            { task: 'Financial Solvency Certificate', status: 'todo' },
+                            { task: 'LOR from Undergrad HOD', status: 'todo' },
+                          ].map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl transition-colors">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                  item.status === 'complete' ? 'bg-green-500 border-green-500' : 'border-gray-200'
+                                }`}>
+                                  {item.status === 'complete' && <div className="w-2 h-2 bg-white rounded-full" />}
+                                </div>
+                                <span className={`text-sm font-medium ${item.status === 'complete' ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                                  {item.task}
+                                </span>
+                              </div>
+                              <span className={`text-[10px] font-bold uppercase ${
+                                item.status === 'complete' ? 'text-green-600' : 
+                                item.status === 'pending' ? 'text-amber-600' : 'text-gray-400'
+                              }`}>
+                                {item.status}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {view === 'counselor' && (
+            <motion.div
+              key="counselor"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <CounselorDashboard />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white py-12 mt-20">
+        <div className="max-w-7xl mx-auto px-4 text-center space-y-4">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <GraduationCap className="w-8 h-8 text-blue-400" />
+            <span className="text-2xl font-black">EduVoyage</span>
+          </div>
+          <p className="text-gray-400 max-w-md mx-auto">Empowering Indian engineers to conquer global horizons with data-driven confidence.</p>
+          <div className="flex justify-center gap-8 text-sm font-medium text-gray-500 pt-8 border-t border-gray-800">
+            <a href="#" className="hover:text-white">Privacy Policy</a>
+            <a href="#" className="hover:text-white">Terms of Service</a>
+            <a href="#" className="hover:text-white">University Partners</a>
+            <a href="#" className="hover:text-white">AI Ethics</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
